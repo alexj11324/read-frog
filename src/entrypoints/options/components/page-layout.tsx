@@ -3,7 +3,7 @@ import { Separator } from "@/components/ui/base-ui/separator"
 import { SidebarTrigger } from "@/components/ui/base-ui/sidebar"
 import { cn } from "@/utils/styles/utils"
 
-export function PageLayout({ title, children, className, innerClassName }: { title: React.ReactNode, children: React.ReactNode, className?: string, innerClassName?: string }) {
+export function PageLayout({ title, children, className, innerClassName, headerRight }: { title: React.ReactNode, children: React.ReactNode, className?: string, innerClassName?: string, headerRight?: React.ReactNode }) {
   return (
     <div className={cn("w-full pb-8", className)}>
       <div className="border-b">
@@ -12,6 +12,7 @@ export function PageLayout({ title, children, className, innerClassName }: { tit
             <SidebarTrigger />
             <Separator orientation="vertical" className="mr-1.5 h-4! my-auto" />
             <h1>{title}</h1>
+            {headerRight && <div className="ml-auto">{headerRight}</div>}
           </header>
         </Container>
       </div>
