@@ -1,5 +1,6 @@
-import { i18n } from "#imports"
-import { useState, useEffect } from "react"
+import { browser } from "#imports"
+import { useMemo, useState } from "react"
+import { SETTINGS_LOCALE_STORAGE_KEY } from "../i18n-override"
 
 const SUPPORTED_LOCALES = [
   { code: "en", label: "English" },
@@ -13,52 +14,25 @@ const SUPPORTED_LOCALES = [
 ]
 
 export default function SettingsLanguageSwitcher() {
-  const _i18n = i18n as any
+  const browserLocale = useMemo(
+    () => browser.i18n.getUILanguage?.() || browser.i18n.getMessage("@@ui_locale") || "en",
+    [],
+  )
 
-  const getInitial = () => {
-    // Try common fields, fall back to navigator
-    const fromI18n = _i18n?.locale ?? _i18n?.language
-    const fromStorage = typeof localStorage !== "undefined" ? localStorage.getItem("read_frog_locale") : null
-    const nav = typeof navigator !== "undefined" ? navigator.language : "en"
-    return (fromI18n as string) || fromStorage || nav || "en"
-  }
+  const initialLocale = useMemo(
+    () => localStorage.getItem(SETTINGS_LOCALE_STORAGE_KEY) || browserLocale,
+    [browserLocale],
+  )
 
-  const [locale, setLocale] = useState<string>(getInitial)
+  const [locale, setLocale] = useState<string>(initialLocale)
 
-  useEffect(() => {
-    // keep local state in sync if the global i18n exposes a value
-    const cur = (_i18n?.locale ?? _i18n?.language) as string | undefined
-    if (cur && cur !== locale) setLocale(cur)
-  }, [])
-
-  const applyLocale = async (next: string) => {
+  const applyLocale = (next: string) => {
     try {
-      if (typeof _i18n?.changeLanguage === "function") {
-        await _i18n.changeLanguage(next)
-        return
-      }
-      if (typeof _i18n?.setLocale === "function") {
-        await _i18n.setLocale(next)
-        return
-      }
-      if (typeof _i18n?.setLanguage === "function") {
-        await _i18n.setLanguage(next)
-        return
-      }
-    }
-    catch (err) {
-      // ignore and fallback to reload
-      console.warn("i18n change API failed:", err)
-    }
-
-    // fallback: persist and reload so the i18n loader picks the new locale
-    try {
-      localStorage.setItem("read_frog_locale", next)
-      // full reload so that any i18n initialization will pick up stored locale
+      localStorage.setItem(SETTINGS_LOCALE_STORAGE_KEY, next)
       location.reload()
     }
     catch (err) {
-      console.error("Failed to persist locale or reload:", err)
+      console.error("Failed to switch settings language:", err)
     }
   }
 

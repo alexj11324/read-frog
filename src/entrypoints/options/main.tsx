@@ -22,6 +22,7 @@ import { applyTheme, getLocalThemeMode, isDarkMode } from "@/utils/theme"
 import App from "./app"
 import { AppSidebar } from "./app-sidebar"
 import { SettingsSearch } from "./command-palette/settings-search"
+import { setupOptionsLocaleOverride } from "./i18n-override"
 import "@/assets/styles/theme.css"
 import "./style.css"
 
@@ -40,6 +41,8 @@ function HydrateAtoms({
 }
 
 async function initApp() {
+  await setupOptionsLocaleOverride()
+
   const root = document.getElementById("root")!
   root.className = "antialiased bg-background"
 
