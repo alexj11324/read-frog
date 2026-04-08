@@ -98,7 +98,12 @@ export class SegmentationPipeline {
         for (const result of results) {
           this.mergeFragments(result.fragments, result.chunk)
         }
-        this.onChunkProcessed?.()
+        try {
+          this.onChunkProcessed?.()
+        }
+        catch {
+          // callback errors must not kill the segmentation loop
+        }
       }
     }
     finally {
