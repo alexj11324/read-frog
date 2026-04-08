@@ -1,8 +1,13 @@
 import type { SubtitlesFragment } from "@/utils/subtitles/types"
 import { getLocalConfig } from "@/utils/config/storage"
-import { PROCESS_LOOK_AHEAD_MS } from "@/utils/constants/subtitles"
+import { MAX_CONCURRENT_SEGMENTS, PROCESS_LOOK_AHEAD_MS } from "@/utils/constants/subtitles"
 import { aiSegmentBlock } from "@/utils/subtitles/processor/ai-segmentation"
-import { optimizeSubtitles } from "@/utils/subtitles/processor/optimizer"
+import { optimizeSubtitles, rebalanceToTargetRange } from "@/utils/subtitles/processor/optimizer"
+
+interface ChunkResult {
+  fragments: SubtitlesFragment[]
+  chunk: SubtitlesFragment[]
+}
 
 export class SegmentationPipeline {
   // Segmented results, read by translation pipeline
@@ -16,15 +21,18 @@ export class SegmentationPipeline {
 
   private getVideoElement: () => HTMLVideoElement | null
   private getSourceLanguage: () => string
+  private onChunkProcessed: (() => void) | null
 
   constructor(options: {
     rawFragments: SubtitlesFragment[]
     getVideoElement: () => HTMLVideoElement | null
     getSourceLanguage: () => string
+    onChunkProcessed?: () => void
   }) {
     this.rawFragments = options.rawFragments
     this.getVideoElement = options.getVideoElement
     this.getSourceLanguage = options.getSourceLanguage
+    this.onChunkProcessed = options.onChunkProcessed ?? null
   }
 
   get isRunning(): boolean {
@@ -68,9 +76,34 @@ export class SegmentationPipeline {
 
     try {
       while (!this.stopped && this.hasUnprocessedChunks()) {
-        const didWork = await this.processNextChunk(video.currentTime * 1000)
-        if (!didWork)
+        const currentTimeMs = video.currentTime * 1000
+        const chunks = this.findNextChunks(currentTimeMs, MAX_CONCURRENT_SEGMENTS)
+        if (chunks.length === 0)
           break
+
+        // Mark all fragments as in-progress
+        for (const chunk of chunks) {
+          chunk.forEach(f => this.segmentedRawStarts.add(f.start))
+        }
+
+        // Process chunks concurrently, then merge results synchronously
+        const results = await Promise.all(chunks.map(chunk => this.processChunk(chunk)))
+        if (this.stopped) {
+          // Roll back claimed fragments so they can be reprocessed on restart
+          for (const chunk of chunks) {
+            chunk.forEach(f => this.segmentedRawStarts.delete(f.start))
+          }
+          break
+        }
+        for (const result of results) {
+          this.mergeFragments(result.fragments, result.chunk)
+        }
+        try {
+          this.onChunkProcessed?.()
+        }
+        catch {
+          // callback errors must not kill the segmentation loop
+        }
       }
     }
     finally {
@@ -78,41 +111,59 @@ export class SegmentationPipeline {
     }
   }
 
-  private async processNextChunk(currentTimeMs: number): Promise<boolean> {
-    const chunk = this.findNextChunk(currentTimeMs)
-    if (chunk.length === 0)
-      return false
-
-    chunk.forEach(f => this.segmentedRawStarts.add(f.start))
-
+  private async processChunk(chunk: SubtitlesFragment[]): Promise<ChunkResult> {
     try {
       const config = await getLocalConfig()
       if (config) {
         const segmented = await aiSegmentBlock(chunk, config)
-        const optimized = optimizeSubtitles(segmented, this.getSourceLanguage())
-        const chunkStart = chunk[0].start
-        const chunkEnd = chunk.at(-1)!.end
-        this.processedFragments = this.processedFragments.filter(
-          f => f.start < chunkStart || f.start > chunkEnd,
-        )
-        this.processedFragments.push(...optimized)
-        this.processedFragments.sort((a, b) => a.start - b.start)
+        const rebalanced = rebalanceToTargetRange(segmented, this.getSourceLanguage())
+        return { fragments: rebalanced, chunk }
       }
     }
-    catch {
+    catch (error) {
+      console.warn("[SegmentationPipeline] AI segmentation failed, falling back:", error)
       chunk.forEach(f => this.aiSegmentFailedRawStarts.add(f.start))
       const optimized = optimizeSubtitles(chunk, this.getSourceLanguage())
-      this.processedFragments.push(...optimized)
-      this.processedFragments.sort((a, b) => a.start - b.start)
+      return { fragments: optimized, chunk }
     }
 
-    return true
+    // Config unavailable — fall back to non-AI processing to avoid dropping chunks
+    const optimized = optimizeSubtitles(chunk, this.getSourceLanguage())
+    return { fragments: optimized, chunk }
   }
 
-  private findNextChunk(currentTimeMs: number): SubtitlesFragment[] {
+  private mergeFragments(newFragments: SubtitlesFragment[], chunk: SubtitlesFragment[]): void {
+    const rawStarts = new Set(chunk.map(f => f.start))
+    this.processedFragments = this.processedFragments.filter(
+      f => !rawStarts.has(f.start),
+    )
+    this.processedFragments.push(...newFragments)
+    this.processedFragments.sort((a, b) => a.start - b.start)
+  }
+
+  /**
+   * Find up to `maxChunks` non-overlapping chunks, prioritizing fragments
+   * closest to the current playback position.
+   */
+  private findNextChunks(currentTimeMs: number, maxChunks: number): SubtitlesFragment[][] {
+    const chunks: SubtitlesFragment[][] = []
+    const claimed = new Set<number>()
+
+    for (let i = 0; i < maxChunks; i++) {
+      const chunk = this.findNextChunk(currentTimeMs, claimed)
+      if (chunk.length === 0)
+        break
+      chunks.push(chunk)
+      chunk.forEach(f => claimed.add(f.start))
+    }
+
+    return chunks
+  }
+
+  private findNextChunk(currentTimeMs: number, claimed: Set<number>): SubtitlesFragment[] {
     const searchStart = Math.max(0, currentTimeMs - 10_000)
     const firstUnprocessed = this.rawFragments.find(
-      f => f.start >= searchStart && !this.segmentedRawStarts.has(f.start),
+      f => f.start >= searchStart && !this.segmentedRawStarts.has(f.start) && !claimed.has(f.start),
     )
     if (!firstUnprocessed)
       return []
@@ -120,7 +171,7 @@ export class SegmentationPipeline {
     const windowEnd = firstUnprocessed.start + PROCESS_LOOK_AHEAD_MS
     return this.rawFragments.filter(
       f => f.start >= firstUnprocessed.start && f.start < windowEnd
-        && !this.segmentedRawStarts.has(f.start),
+        && !this.segmentedRawStarts.has(f.start) && !claimed.has(f.start),
     )
   }
 }

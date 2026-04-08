@@ -19,6 +19,7 @@ export class TranslationCoordinator {
   private translatedStarts = new Set<number>()
   private failedStarts = new Set<number>()
   private isTranslating = false
+  private stopped = false
   private lastEmittedState: SubtitlesState = "idle"
   private videoContext: SubtitlesVideoContext = { videoTitle: "", subtitlesTextContent: "" }
 
@@ -43,6 +44,8 @@ export class TranslationCoordinator {
       this.videoContext = videoContext
     }
 
+    this.stopped = false
+
     const video = this.getVideoElement()
     if (!video)
       return
@@ -59,6 +62,7 @@ export class TranslationCoordinator {
   }
 
   stop() {
+    this.stopped = true
     const video = this.getVideoElement()
     if (!video)
       return
@@ -79,6 +83,12 @@ export class TranslationCoordinator {
 
   clearFailed() {
     this.failedStarts.clear()
+  }
+
+  triggerTranslationTick() {
+    if (this.stopped)
+      return
+    this.handleTranslationTick()
   }
 
   private handleTranslationTick = () => {
