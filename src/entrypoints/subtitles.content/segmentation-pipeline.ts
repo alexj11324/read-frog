@@ -91,9 +91,7 @@ export class SegmentationPipeline {
         if (this.stopped)
           break
         for (const result of results) {
-          if (result) {
-            this.mergeFragments(result.fragments, result.chunk)
-          }
+          this.mergeFragments(result.fragments, result.chunk)
         }
         this.onChunkProcessed?.()
       }
@@ -103,7 +101,7 @@ export class SegmentationPipeline {
     }
   }
 
-  private async processChunk(chunk: SubtitlesFragment[]): Promise<ChunkResult | null> {
+  private async processChunk(chunk: SubtitlesFragment[]): Promise<ChunkResult> {
     try {
       const config = await getLocalConfig()
       if (config) {
