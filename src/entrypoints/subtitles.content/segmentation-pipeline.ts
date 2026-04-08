@@ -88,6 +88,8 @@ export class SegmentationPipeline {
 
         // Process chunks concurrently, then merge results synchronously
         const results = await Promise.all(chunks.map(chunk => this.processChunk(chunk)))
+        if (this.stopped)
+          break
         for (const result of results) {
           if (result) {
             this.mergeFragments(result.fragments, result.chunk)
@@ -116,7 +118,9 @@ export class SegmentationPipeline {
       return { fragments: optimized, chunk }
     }
 
-    return null
+    // Config unavailable — fall back to non-AI processing to avoid dropping chunks
+    const optimized = optimizeSubtitles(chunk, this.getSourceLanguage())
+    return { fragments: optimized, chunk }
   }
 
   private mergeFragments(newFragments: SubtitlesFragment[], chunk: SubtitlesFragment[]): void {
