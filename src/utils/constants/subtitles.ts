@@ -10,6 +10,9 @@ export const MAX_WORDS = 15
 export const MAX_CHARS_CJK = 30
 export const SENTENCE_END_PATTERN = /[,.。?？！!；;…؟۔\n]$/
 
+// AI segmentation concurrency
+export const MAX_CONCURRENT_SEGMENTS = 3
+
 // On-demand translation constants
 export const TRANSLATION_BATCH_SIZE = 5
 export const TRANSLATE_LOOK_AHEAD_MS = 30_000
