@@ -88,8 +88,13 @@ export class SegmentationPipeline {
 
         // Process chunks concurrently, then merge results synchronously
         const results = await Promise.all(chunks.map(chunk => this.processChunk(chunk)))
-        if (this.stopped)
+        if (this.stopped) {
+          // Roll back claimed fragments so they can be reprocessed on restart
+          for (const chunk of chunks) {
+            chunk.forEach(f => this.segmentedRawStarts.delete(f.start))
+          }
           break
+        }
         for (const result of results) {
           this.mergeFragments(result.fragments, result.chunk)
         }
