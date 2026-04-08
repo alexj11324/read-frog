@@ -120,7 +120,8 @@ export class SegmentationPipeline {
         return { fragments: rebalanced, chunk }
       }
     }
-    catch {
+    catch (error) {
+      console.warn("[SegmentationPipeline] AI segmentation failed, falling back:", error)
       chunk.forEach(f => this.aiSegmentFailedRawStarts.add(f.start))
       const optimized = optimizeSubtitles(chunk, this.getSourceLanguage())
       return { fragments: optimized, chunk }
