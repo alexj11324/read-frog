@@ -1,10 +1,10 @@
 import { i18n } from "#imports"
 import { PageLayout } from "../../components/page-layout"
+import SettingsLanguageSwitcher from "../../components/settings-language-switcher"
 import AppearanceSettings from "./appearance-settings"
 import FeatureProvidersConfig from "./feature-providers-config"
 import LanguageDetectionConfig from "./language-detection-config"
 import SiteControlMode from "./site-control-mode"
-import SettingsLanguageSwitcher from "../../components/settings-language-switcher"
 
 export function GeneralPage() {
   return (
