@@ -17,7 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { cn } from "@/utils/styles/utils"
 
 export function SortableList<T extends { id: string }>({
@@ -34,6 +34,10 @@ export function SortableList<T extends { id: string }>({
   const [activeId, setActiveId] = useState<string | null>(null)
 
   const activeItem = activeId ? (list.find(item => item.id === activeId) ?? null) : null
+
+  // Bolt: Memoized `itemIds` array passed to `SortableContext` using `useMemo` to prevent
+  // new array reference creation on every render, avoiding unnecessary context updates.
+  const itemIds = useMemo(() => list.map(item => item.id), [list])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -85,7 +89,7 @@ export function SortableList<T extends { id: string }>({
       onDragCancel={() => setActiveId(null)}
     >
       <SortableContext
-        items={list.map(item => item.id)}
+        items={itemIds}
         strategy={verticalListSortingStrategy}
       >
         <div className={className} style={{ overflowAnchor: "none" }}>
