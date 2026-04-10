@@ -1,0 +1,3 @@
+## 2024-05-18 - ReactMarkdown and Dnd-kit performance optimization
+**Learning:** Defining objects like `components` prop in `ReactMarkdown` inline inside a functional component forces React to unnecessarily unmount and remount the entire markdown DOM tree on every render, severely impacting performance. Similarly, passing newly created arrays like `list.map(item => item.id)` to `SortableContext` causes unnecessary context recalculations.
+**Action:** Extract static objects outside the component definition or memoize them using `useMemo` at the component's top level to avoid unnecessary recalculations and inner component re-renders.
